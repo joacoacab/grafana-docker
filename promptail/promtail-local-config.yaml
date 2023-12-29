@@ -1,0 +1,23 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /data/loki/positions.yaml
+
+clients:
+  - url: http://grafana.nybblegroup.com:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: 'Odoo logs'
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: dev
+          __path__: /home/ubuntu/dev/odoo-logs/odoo-server.log*
+      - targets:
+          - localhost
+        labels:
+          job: uat
+          __path__: /home/ubuntu/uat/odoo-logs/odoo-server.log*
