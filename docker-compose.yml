@@ -2,7 +2,8 @@ version: "3.7"
 
 volumes:
   grafana-data:
-  prometheus-data:    
+  prometheus-data:
+  loki-data:
 
 services:
 #Main containers 
@@ -10,10 +11,40 @@ services:
     image: grafana/grafana:10.0.10-ubuntu
     container_name: grafana
     restart: unless-stopped
+#   environment:
+#     - GF_DATABASE_TYPE=postgres
+#     - GF_DATABASE_HOST=postgres:5432
+#     - GF_DATABASE_NAME=grafana
+#     - GF_DATABASE_USER=grafana_user
+#     - GF_DATABASE_PASSWORD=grafana
+#     - GF_DATABASE_SSL_MODE=disable
+    depends_on:
+      - db
     volumes:
-    - grafana-data:/var/lib/grafana
+      - grafana-data:/var/lib/grafana
+      - ./conf/grafana.ini:/etc/grafana/grafana.ini
+    env_file:
+      - ./conf/grafana-env.list
     ports:
-    - 3000:3000
+      - 3000:3000
+    networks:
+      - grafana
+
+  db:
+    image: postgres:15
+    container_name: postgres
+    restart: always
+    environment:
+      - POSTGRES_DB=postgres
+      - POSTGRES_PASSWORD=grafana
+      - POSTGRES_USER=grafana
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    volumes:
+#      - ./db-data:/var/lib/postgresql/data/pgdata
+#      - ./db-logs:/var/log/postgresql
+      - /home/joaco/projects/grafana-docker/backup:/mnt/backups
+    ports:
+      - "5432:5432"
     networks:
       - grafana
 
@@ -35,10 +66,25 @@ services:
     networks:
       - grafana
 
+  loki:
+    image: grafana/loki:latest
+    container_name: loki
+    volumes:
+      - ./loki/loki-config.yml:/etc/loki/loki-config.yml
+      - loki-data:/loki
+    restart: always
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - grafana
+
+
 #Secondary containers
 
   renderer:
     image: grafana/grafana-image-renderer:3.5.0
+    container_name: renderer
     restart: always
     ports:
       - 8081:8081
@@ -48,19 +94,9 @@ services:
   blackbox:
     restart: always
     image: bitnami/blackbox-exporter:latest
+    container_name: blackbox
     ports:
       - "9115:9115"
-    networks:
-      - grafana
-
-  loki:
-    image: grafana/loki:latest
-    volumes:
-      - ./loki/loki-config.yml:/etc/loki/loki-config.yml
-    restart: always
-    ports:
-      - "3100:3100"
-    command: -config.file=/etc/loki/local-config.yaml
     networks:
       - grafana
 

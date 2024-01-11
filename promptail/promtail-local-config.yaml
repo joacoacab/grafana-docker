@@ -6,7 +6,7 @@ positions:
   filename: /data/loki/positions.yaml
 
 clients:
-  - url: http://grafana.nybblegroup.com:3100/loki/api/v1/push
+  - url: #http://grafana.nybblegroup.com:3100/loki/api/v1/push
 
 scrape_configs:
   - job_name: 'Odoo logs'
