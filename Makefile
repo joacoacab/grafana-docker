@@ -2,6 +2,7 @@
 
 start:
 	@[ -f traefik/acme.json ] || (touch traefik/acme.json && chmod 600 traefik/acme.json)
+	@[ -f traefik/dynamic/.htpasswd ] || ./scripts/gen-htpasswd.sh
 	@docker compose up -d
 
 stop:

@@ -90,10 +90,17 @@ remote "
 log "Step 3 — Copy .env to server"
 upload "$ENV_FILE" "${REMOTE_DIR}/.env"
 
-# ─── 4. Prepare acme.json (Traefik requires chmod 600) ───────────────────────
-log "Step 4 — Ensure traefik/acme.json exists with chmod 600"
+# ─── 4. Generate .htpasswd for Traefik basicAuth ─────────────────────────────
+log "Step 4 — Generate traefik/dynamic/.htpasswd from .env"
 remote "
-  ACME='${REMOTE_DIR}/traefik/acme.json'
+  cd '${REMOTE_DIR}'
+  bash scripts/gen-htpasswd.sh '${REMOTE_DIR}/.env'
+"
+
+# ─── 5. Prepare acme.json (Traefik requires chmod 600) ───────────────────────
+log "Step 5 — Ensure traefik/acme.json exists with chmod 600"
+remote "
+  ACME=\"${REMOTE_DIR}/traefik/acme.json\"
   if [ ! -f \"\$ACME\" ]; then
     touch \"\$ACME\"
     echo '    Created acme.json'
@@ -102,8 +109,8 @@ remote "
   echo '    acme.json: OK (chmod 600)'
 "
 
-# ─── 5. Start the stack ───────────────────────────────────────────────────────
-log "Step 5 — docker compose up -d"
+# ─── 6. Start the stack ───────────────────────────────────────────────────────
+log "Step 6 — docker compose up -d"
 remote "
   cd '${REMOTE_DIR}'
   ${COMPOSE_CMD} pull --quiet

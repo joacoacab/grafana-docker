@@ -1,0 +1,59 @@
+http:
+  routers:
+    grafana:
+      rule: "Host(`obs.siracnetwork.com`)"
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      service: grafana
+
+    loki:
+      rule: "Host(`obs.siracnetwork.com`) && PathPrefix(`/loki`)"
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      middlewares:
+        - ingesta-auth
+      service: loki
+
+    prometheus:
+      rule: "Host(`obs.siracnetwork.com`) && PathPrefix(`/prometheus`)"
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      middlewares:
+        - ingesta-auth
+        - strip-prometheus
+      service: prometheus
+
+    tempo-otlp:
+      rule: "PathPrefix(`/`)"
+      entryPoints:
+        - otlp-http
+      middlewares:
+        - ingesta-auth
+      service: tempo-otlp
+
+  services:
+    grafana:
+      loadBalancer:
+        servers:
+          - url: "http://grafana:3000"
+
+    loki:
+      loadBalancer:
+        servers:
+          - url: "http://loki:3100"
+
+    prometheus:
+      loadBalancer:
+        servers:
+          - url: "http://prometheus:9090"
+
+    tempo-otlp:
+      loadBalancer:
+        servers:
+          - url: "http://tempo:4318"

@@ -1,0 +1,9 @@
+http:
+  middlewares:
+    ingesta-auth:
+      basicAuth:
+        usersFile: /etc/traefik/dynamic/.htpasswd
+    strip-prometheus:
+      stripPrefix:
+        prefixes:
+          - "/prometheus"

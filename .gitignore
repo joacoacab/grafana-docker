@@ -2,3 +2,5 @@
 # acme.json holds TLS certs — gitignored to avoid leaking keys and conflicts on pull
 # deploy.sh creates it automatically on first deploy; locally: make start handles it
 traefik/acme.json
+# .htpasswd contains credential hashes — generated at deploy time by scripts/gen-htpasswd.sh
+traefik/dynamic/.htpasswd
