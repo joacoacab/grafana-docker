@@ -19,13 +19,13 @@ services:
     environment:
       - TRAEFIK_ACME_EMAIL=${TRAEFIK_ACME_EMAIL}
       - INGESTA_BASIC_AUTH=${INGESTA_BASIC_AUTH}
+      - DOMAIN=${DOMAIN}
     ports:
       - "80:80"
       - "443:443"
       - "4318:4318"    # OTLP HTTP (Tempo) — protected by basicAuth
       - "8080:8080"    # Traefik dashboard — block at firewall in production
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
       - ./traefik/dynamic:/etc/traefik/dynamic:ro
       - ./traefik/acme.json:/acme.json  # chmod 600 required; see Makefile
@@ -46,14 +46,6 @@ services:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
     ports:
       - "3000:3000"    # Direct access for local dev
-    labels:
-      - "traefik.enable=true"
-      # HTTPS router (production)
-      - "traefik.http.routers.grafana.rule=Host(`${DOMAIN:-localhost}`)"
-      - "traefik.http.routers.grafana.entrypoints=websecure"
-      - "traefik.http.routers.grafana.tls=true"
-      - "traefik.http.routers.grafana.tls.certresolver=letsencrypt"
-      - "traefik.http.services.grafana.loadbalancer.server.port=3000"
     depends_on:
       - loki
       - prometheus
@@ -72,15 +64,6 @@ services:
       - loki-data:/loki
     ports:
       - "3100:3100"    # Direct access for local dev; block at firewall in production
-    labels:
-      - "traefik.enable=true"
-      # HTTPS with basicAuth — path /loki/api/v1/push matches Loki's native push URL
-      - "traefik.http.routers.loki.rule=Host(`${DOMAIN:-localhost}`) && PathPrefix(`/loki`)"
-      - "traefik.http.routers.loki.entrypoints=websecure"
-      - "traefik.http.routers.loki.tls=true"
-      - "traefik.http.routers.loki.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.loki.middlewares=ingesta-auth@file"
-      - "traefik.http.services.loki.loadbalancer.server.port=3100"
     networks:
       - observability
 
@@ -101,16 +84,6 @@ services:
       - "host.docker.internal:host-gateway"
     ports:
       - "9090:9090"    # Direct access for local dev; block at firewall in production
-    labels:
-      - "traefik.enable=true"
-      # HTTPS with basicAuth — /prometheus prefix stripped before forwarding
-      - "traefik.http.routers.prometheus.rule=Host(`${DOMAIN:-localhost}`) && PathPrefix(`/prometheus`)"
-      - "traefik.http.routers.prometheus.entrypoints=websecure"
-      - "traefik.http.routers.prometheus.tls=true"
-      - "traefik.http.routers.prometheus.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.prometheus.middlewares=ingesta-auth@file,strip-prometheus@docker"
-      - "traefik.http.middlewares.strip-prometheus.stripprefix.prefixes=/prometheus"
-      - "traefik.http.services.prometheus.loadbalancer.server.port=9090"
     networks:
       - observability
 
@@ -145,13 +118,6 @@ services:
       - "3200:3200"    # HTTP API — direct access for local dev
       - "4317:4317"    # OTLP gRPC — direct (Traefik TCP proxy optional in Fase 3)
       # 4318 is handled by Traefik's otlp-http entrypoint with basicAuth
-    labels:
-      - "traefik.enable=true"
-      # OTLP HTTP with basicAuth on dedicated port 4318
-      - "traefik.http.routers.tempo-otlp.rule=PathPrefix(`/`)"
-      - "traefik.http.routers.tempo-otlp.entrypoints=otlp-http"
-      - "traefik.http.routers.tempo-otlp.middlewares=ingesta-auth@file"
-      - "traefik.http.services.tempo-otlp.loadbalancer.server.port=4318"
     networks:
       - observability
 

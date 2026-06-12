@@ -39,9 +39,6 @@ certificatesResolvers:
       tlsChallenge: {}
 
 providers:
-  docker:
-    exposedByDefault: false
-    network: observability
   file:
     directory: /etc/traefik/dynamic
     watch: true

@@ -1,0 +1,63 @@
+# Traefik dynamic config — routers and services
+# Static file-based routing; no Docker provider needed.
+# DOMAIN is expanded from the Traefik container's environment.
+
+http:
+  routers:
+    grafana:
+      rule: "Host(`${DOMAIN}`)"
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      service: grafana
+
+    loki:
+      rule: "Host(`${DOMAIN}`) && PathPrefix(`/loki`)"
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      middlewares:
+        - ingesta-auth
+      service: loki
+
+    prometheus:
+      rule: "Host(`${DOMAIN}`) && PathPrefix(`/prometheus`)"
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      middlewares:
+        - ingesta-auth
+        - strip-prometheus
+      service: prometheus
+
+    tempo-otlp:
+      rule: "PathPrefix(`/`)"
+      entryPoints:
+        - otlp-http
+      middlewares:
+        - ingesta-auth
+      service: tempo-otlp
+
+  services:
+    grafana:
+      loadBalancer:
+        servers:
+          - url: "http://grafana:3000"
+
+    loki:
+      loadBalancer:
+        servers:
+          - url: "http://loki:3100"
+
+    prometheus:
+      loadBalancer:
+        servers:
+          - url: "http://prometheus:9090"
+
+    tempo-otlp:
+      loadBalancer:
+        servers:
+          - url: "http://tempo:4318"
