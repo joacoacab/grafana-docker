@@ -3,8 +3,9 @@
 # The .env file uses $$ escaping for docker-compose; this script converts it back to $.
 set -euo pipefail
 
-ENV_FILE="${1:-.env}"
-OUT="traefik/dynamic/.htpasswd"
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ENV_FILE="${1:-${REPO_ROOT}/.env}"
+OUT="${REPO_ROOT}/traefik/dynamic/.htpasswd"
 
 if [[ ! -f "$ENV_FILE" ]]; then
   echo "Error: $ENV_FILE not found" >&2
