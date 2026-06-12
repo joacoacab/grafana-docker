@@ -1,21 +1,20 @@
-#DO NOT CHANGE
-include .env
-
-psql:
-	@docker exec -it ${DB_CONTAINER} psql -U ${DATABASE_USER} -d ${DATABASE_NAME}
+.PHONY: start stop restart logs ps status
 
 start:
-	@docker-compose up -d
+	@[ -f traefik/acme.json ] || (touch traefik/acme.json && chmod 600 traefik/acme.json)
+	@docker compose up -d
 
 stop:
-	@docker-compose down
+	@docker compose down
 
 restart:
-	@docker-compose restart
+	@docker compose restart
 
-postgres:
-	@docker exec -it ${DB_CONTAINER} bash
-.PHONY: postgres
+logs:
+	@docker compose logs -f
 
-grafana-db:
-	@docker exec -it ${DB_CONTAINER} psql -U grafana_user -d grafana
+ps:
+	@docker compose ps
+
+status:
+	@docker compose ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}"

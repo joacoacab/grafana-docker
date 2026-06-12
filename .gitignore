@@ -1,0 +1,4 @@
+.env
+# acme.json holds TLS certs — gitignored to avoid leaking keys and conflicts on pull
+# deploy.sh creates it automatically on first deploy; locally: make start handles it
+traefik/acme.json

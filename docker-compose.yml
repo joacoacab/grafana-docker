@@ -1,105 +1,176 @@
-version: "3.7"
-
 volumes:
   grafana-data:
-  prometheus-data:
   loki-data:
-
-services:
-#Main containers 
-  grafana:
-    image: grafana/grafana:10.0.10-ubuntu
-    container_name: grafana
-    restart: unless-stopped
-#   environment:
-#     - GF_DATABASE_TYPE=postgres
-#     - GF_DATABASE_HOST=postgres:5432
-#     - GF_DATABASE_NAME=grafana
-#     - GF_DATABASE_USER=grafana_user
-#     - GF_DATABASE_PASSWORD=grafana
-#     - GF_DATABASE_SSL_MODE=disable
-    depends_on:
-      - db
-    volumes:
-      - grafana-data:/var/lib/grafana
-      - ./conf/grafana.ini:/etc/grafana/grafana.ini
-    env_file:
-      - ./conf/grafana-env.list
-    ports:
-      - 3000:3000
-    networks:
-      - grafana
-
-  db:
-    image: postgres:15
-    container_name: postgres
-    restart: always
-    environment:
-      - POSTGRES_DB=postgres
-      - POSTGRES_PASSWORD=grafana
-      - POSTGRES_USER=grafana
-      - PGDATA=/var/lib/postgresql/data/pgdata
-    volumes:
-#      - ./db-data:/var/lib/postgresql/data/pgdata
-#      - ./db-logs:/var/log/postgresql
-      - /home/joaco/projects/grafana-docker/backup:/mnt/backups
-    ports:
-      - "5432:5432"
-    networks:
-      - grafana
-
-  prometheus:
-    image: prom/prometheus:v2.47.0
-    container_name: prometheus
-    restart: unless-stopped
-    volumes:
-    - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
- #   - prometheus-data:/prometheus
-    ports:
-    - 9090:9090
-    - 9100:9100
-    command:
-    - '--config.file=/etc/prometheus/prometheus.yml'
-    - '--storage.tsdb.path=/prometheus'
-    - '--storage.tsdb.retention.time=1m'
-    - '--web.enable-lifecycle'
-    networks:
-      - grafana
-
-  loki:
-    image: grafana/loki:latest
-    container_name: loki
-    volumes:
-      - ./loki/loki-config.yml:/etc/loki/loki-config.yml
-      - loki-data:/loki
-    restart: always
-    ports:
-      - "3100:3100"
-    command: -config.file=/etc/loki/local-config.yaml
-    networks:
-      - grafana
-
-
-#Secondary containers
-
-  renderer:
-    image: grafana/grafana-image-renderer:3.5.0
-    container_name: renderer
-    restart: always
-    ports:
-      - 8081:8081
-    networks:
-      - grafana
-
-  blackbox:
-    restart: always
-    image: bitnami/blackbox-exporter:latest
-    container_name: blackbox
-    ports:
-      - "9115:9115"
-    networks:
-      - grafana
+  # mimir-data:   # FASE 2 — reactivar con 4GB+
+  prometheus-data:
+  tempo-data:
 
 networks:
+  observability:
+    driver: bridge
+
+services:
+
+  # ── Reverse proxy ────────────────────────────────────────────────────────
+  traefik:
+    image: traefik:v3.3
+    container_name: traefik
+    restart: unless-stopped
+    environment:
+      - TRAEFIK_ACME_EMAIL=${TRAEFIK_ACME_EMAIL}
+      - INGESTA_BASIC_AUTH=${INGESTA_BASIC_AUTH}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "4318:4318"    # OTLP HTTP (Tempo) — protected by basicAuth
+      - "8080:8080"    # Traefik dashboard — block at firewall in production
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik/dynamic:/etc/traefik/dynamic:ro
+      - ./traefik/acme.json:/acme.json  # chmod 600 required; see Makefile
+    networks:
+      - observability
+
+  # ── Visualization ────────────────────────────────────────────────────────
   grafana:
-    external: true
+    image: grafana/grafana:13.0.2
+    container_name: grafana
+    restart: unless-stopped
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GF_SECURITY_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD:-admin}
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/grafana.ini:/etc/grafana/grafana.ini:ro
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "3000:3000"    # Direct access for local dev
+    labels:
+      - "traefik.enable=true"
+      # HTTPS router (production)
+      - "traefik.http.routers.grafana.rule=Host(`${DOMAIN:-localhost}`)"
+      - "traefik.http.routers.grafana.entrypoints=websecure"
+      - "traefik.http.routers.grafana.tls=true"
+      - "traefik.http.routers.grafana.tls.certresolver=letsencrypt"
+      - "traefik.http.services.grafana.loadbalancer.server.port=3000"
+    depends_on:
+      - loki
+      - prometheus
+      - tempo
+    networks:
+      - observability
+
+  # ── Log aggregation ──────────────────────────────────────────────────────
+  loki:
+    image: grafana/loki:3.7.0
+    container_name: loki
+    restart: unless-stopped
+    command: -config.file=/etc/loki/loki.yml
+    volumes:
+      - ./loki/loki.yml:/etc/loki/loki.yml:ro
+      - loki-data:/loki
+    ports:
+      - "3100:3100"    # Direct access for local dev; block at firewall in production
+    labels:
+      - "traefik.enable=true"
+      # HTTPS with basicAuth — path /loki/api/v1/push matches Loki's native push URL
+      - "traefik.http.routers.loki.rule=Host(`${DOMAIN:-localhost}`) && PathPrefix(`/loki`)"
+      - "traefik.http.routers.loki.entrypoints=websecure"
+      - "traefik.http.routers.loki.tls=true"
+      - "traefik.http.routers.loki.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.loki.middlewares=ingesta-auth@file"
+      - "traefik.http.services.loki.loadbalancer.server.port=3100"
+    networks:
+      - observability
+
+  # ── Metrics (Phase 1 — 2 GB friendly) ───────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v3.4.0
+    container_name: prometheus
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+      - --web.enable-lifecycle
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "9090:9090"    # Direct access for local dev; block at firewall in production
+    labels:
+      - "traefik.enable=true"
+      # HTTPS with basicAuth — /prometheus prefix stripped before forwarding
+      - "traefik.http.routers.prometheus.rule=Host(`${DOMAIN:-localhost}`) && PathPrefix(`/prometheus`)"
+      - "traefik.http.routers.prometheus.entrypoints=websecure"
+      - "traefik.http.routers.prometheus.tls=true"
+      - "traefik.http.routers.prometheus.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.prometheus.middlewares=ingesta-auth@file,strip-prometheus@docker"
+      - "traefik.http.middlewares.strip-prometheus.stripprefix.prefixes=/prometheus"
+      - "traefik.http.services.prometheus.loadbalancer.server.port=9090"
+    networks:
+      - observability
+
+  # ── Long-term metrics — FASE 2 (reactivar con 4GB+) ─────────────────────
+  # mimir:
+  #   image: grafana/mimir:3.1.0
+  #   container_name: mimir
+  #   restart: unless-stopped
+  #   command:
+  #     - -config.file=/etc/mimir/mimir.yml
+  #     - -target=all
+  #   volumes:
+  #     - ./mimir/mimir.yml:/etc/mimir/mimir.yml:ro
+  #     - mimir-data:/data
+  #   ports:
+  #     - "9009:9009"
+  #   networks:
+  #     - observability
+
+  # ── Distributed tracing ──────────────────────────────────────────────────
+  tempo:
+    image: grafana/tempo:2.8.1
+    container_name: tempo
+    restart: unless-stopped
+    command:
+      - -target=all
+      - -config.file=/etc/tempo/tempo.yml
+    volumes:
+      - ./tempo/tempo.yml:/etc/tempo/tempo.yml:ro
+      - tempo-data:/var/tempo
+    ports:
+      - "3200:3200"    # HTTP API — direct access for local dev
+      - "4317:4317"    # OTLP gRPC — direct (Traefik TCP proxy optional in Fase 3)
+      # 4318 is handled by Traefik's otlp-http entrypoint with basicAuth
+    labels:
+      - "traefik.enable=true"
+      # OTLP HTTP with basicAuth on dedicated port 4318
+      - "traefik.http.routers.tempo-otlp.rule=PathPrefix(`/`)"
+      - "traefik.http.routers.tempo-otlp.entrypoints=otlp-http"
+      - "traefik.http.routers.tempo-otlp.middlewares=ingesta-auth@file"
+      - "traefik.http.services.tempo-otlp.loadbalancer.server.port=4318"
+    networks:
+      - observability
+
+  # ── Unified observability agent (log shipping) ───────────────────────────
+  alloy:
+    image: grafana/alloy:v1.9.2
+    container_name: alloy
+    restart: unless-stopped
+    command:
+      - run
+      - /etc/alloy/config.alloy
+      - --storage.path=/var/lib/alloy/data
+      - --server.http.listen-addr=0.0.0.0:12345
+    volumes:
+      - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - "12345:12345"  # Alloy UI + metrics
+    depends_on:
+      - loki
+    networks:
+      - observability
