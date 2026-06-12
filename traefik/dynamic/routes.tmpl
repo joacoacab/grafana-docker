@@ -1,11 +1,7 @@
-# Traefik dynamic config — routers and services
-# Static file-based routing; no Docker provider needed.
-# DOMAIN is expanded from the Traefik container's environment.
-
 http:
   routers:
     grafana:
-      rule: "Host(`${DOMAIN}`)"
+      rule: "Host(`{{ env "DOMAIN" }}`)"
       entryPoints:
         - websecure
       tls:
@@ -13,7 +9,7 @@ http:
       service: grafana
 
     loki:
-      rule: "Host(`${DOMAIN}`) && PathPrefix(`/loki`)"
+      rule: "Host(`{{ env "DOMAIN" }}`) && PathPrefix(`/loki`)"
       entryPoints:
         - websecure
       tls:
@@ -23,7 +19,7 @@ http:
       service: loki
 
     prometheus:
-      rule: "Host(`${DOMAIN}`) && PathPrefix(`/prometheus`)"
+      rule: "Host(`{{ env "DOMAIN" }}`) && PathPrefix(`/prometheus`)"
       entryPoints:
         - websecure
       tls:

@@ -1,0 +1,10 @@
+http:
+  middlewares:
+    ingesta-auth:
+      basicAuth:
+        users:
+          - "{{ env "INGESTA_BASIC_AUTH" }}"
+    strip-prometheus:
+      stripPrefix:
+        prefixes:
+          - "/prometheus"
