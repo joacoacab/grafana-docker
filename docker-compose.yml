@@ -16,8 +16,6 @@ services:
     image: traefik:v3.3
     container_name: traefik
     restart: unless-stopped
-    environment:
-      - TRAEFIK_ACME_EMAIL=${TRAEFIK_ACME_EMAIL}
     ports:
       - "80:80"
       - "443:443"

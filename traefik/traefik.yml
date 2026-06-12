@@ -1,5 +1,4 @@
 # Traefik v3 — Phase 2
-# Env vars injected from docker-compose: TRAEFIK_ACME_EMAIL, INGESTA_BASIC_AUTH
 
 api:
   dashboard: true
@@ -33,7 +32,7 @@ entryPoints:
 certificatesResolvers:
   letsencrypt:
     acme:
-      email: ${TRAEFIK_ACME_EMAIL}
+      email: joaco@siracnetwork.com
       storage: /acme.json
       # tlsChallenge works on port 443; compatible with the HTTP→HTTPS redirect above
       tlsChallenge: {}
